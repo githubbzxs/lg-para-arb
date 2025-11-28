@@ -9,7 +9,6 @@ import requests
 import traceback
 from decimal import Decimal
 from typing import Tuple
-from collections import deque
 
 from lighter.signer_client import SignerClient
 from edgex_sdk import Client, WebSocketManager
@@ -40,7 +39,6 @@ class EdgexArb:
         self.order_quantity = order_quantity
         self.fill_timeout = fill_timeout
         self.max_position = max_position
-        self.spread_history = deque(maxlen=2000)
         self.stop_flag = False
         self._cleanup_done = False
 
@@ -241,9 +239,9 @@ class EdgexArb:
         # Prevent multiple shutdown calls
         if self.stop_flag:
             return
-        
+
         self.stop_flag = True
-        
+
         if signum is not None:
             self.logger.info("\n🛑 Stopping...")
         else:
@@ -277,7 +275,7 @@ class EdgexArb:
         """Async cleanup for aiohttp sessions and other async resources."""
         if self._cleanup_done:
             return
-        
+
         self._cleanup_done = True
 
         # Close EdgeX client (closes aiohttp sessions) with timeout
@@ -518,25 +516,15 @@ class EdgexArb:
                     timeout=5.0
                 )
             except asyncio.TimeoutError:
-                if self.stop_flag:
-                    break
                 self.logger.warning("⚠️ Timeout fetching EdgeX BBO prices")
                 await asyncio.sleep(0.5)
                 continue
             except Exception as e:
-                if self.stop_flag:
-                    break
                 self.logger.error(f"⚠️ Error fetching EdgeX BBO prices: {e}")
                 await asyncio.sleep(0.5)
                 continue
 
-            if self.stop_flag:
-                break
-
             lighter_bid, lighter_ask = self.order_book_manager.get_lighter_bbo()
-
-            if lighter_bid and ex_best_bid:
-                self.spread_history.append(lighter_bid - ex_best_bid)
 
             # Determine if we should trade
             long_ex = False
@@ -571,11 +559,7 @@ class EdgexArb:
                   short_ex):
                 await self._execute_short_trade()
             else:
-                # Sleep in smaller increments to check stop_flag more frequently
-                for _ in range(20):  # 2 seconds total, but check every 0.1s
-                    if self.stop_flag:
-                        break
-                    await asyncio.sleep(0.1)
+                await asyncio.sleep(0.05)
 
     async def _execute_long_trade(self):
         """Execute a long trade (buy on EdgeX, sell on Lighter)."""
