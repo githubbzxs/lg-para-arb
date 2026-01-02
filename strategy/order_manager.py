@@ -265,6 +265,7 @@ class OrderManager:
                     self.logger.warning("无法使用市价单类型，改用限价单")
 
             time_in_force_value = self.lighter_client.ORDER_TIME_IN_FORCE_GOOD_TILL_TIME
+            ioc_value = None
             force_ioc = self.lighter_force_ioc or (
                 market_type is not None and order_type_value == market_type
             )
@@ -279,6 +280,12 @@ class OrderManager:
                 else:
                     self.logger.warning("无法使用 IOC 时效，改用 GTT")
 
+            order_expiry_value = getattr(
+                self.lighter_client, "DEFAULT_28_DAY_ORDER_EXPIRY", -1
+            )
+            if ioc_value is not None and time_in_force_value == ioc_value:
+                order_expiry_value = getattr(self.lighter_client, "DEFAULT_IOC_EXPIRY", 0)
+
             tx_info, error = self.lighter_client.sign_create_order(
                 market_index=self.lighter_market_index,
                 client_order_index=client_order_index,
@@ -287,6 +294,7 @@ class OrderManager:
                 is_ask=is_ask,
                 order_type=order_type_value,
                 time_in_force=time_in_force_value,
+                order_expiry=order_expiry_value,
                 reduce_only=False,
                 trigger_price=0,
             )
