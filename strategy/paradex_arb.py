@@ -282,6 +282,36 @@ class ParadexArb:
         }
         return mapping.get(action, action)
 
+    def _get_decimal_value(self, data: dict, *keys: str) -> Optional[Decimal]:
+        for key in keys:
+            if key not in data:
+                continue
+            value = data.get(key)
+            if value is None or value == "":
+                continue
+            try:
+                return Decimal(str(value))
+            except Exception:
+                continue
+        return None
+
+    def _get_bool_value(self, data: dict, *keys: str) -> Optional[bool]:
+        for key in keys:
+            if key not in data:
+                continue
+            value = data.get(key)
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, (int, float)):
+                return value != 0
+            if isinstance(value, str):
+                normalized = value.strip().lower()
+                if normalized in ("true", "1", "yes", "y", "on"):
+                    return True
+                if normalized in ("false", "0", "no", "n", "off"):
+                    return False
+        return None
+
     def _log_status(self, now: float) -> None:
         if self.status_log_interval <= 0:
             return
@@ -589,24 +619,61 @@ class ParadexArb:
 
     def _handle_lighter_order_filled(self, order_data: dict):
         try:
-            order_data["avg_filled_price"] = (
-                Decimal(order_data["filled_quote_amount"]) /
-                Decimal(order_data["filled_base_amount"])
+            is_ask = self._get_bool_value(order_data, "is_ask", "isAsk")
+            if is_ask is None:
+                is_ask = False
+            order_data["is_ask"] = is_ask
+
+            filled_qty = self._get_decimal_value(
+                order_data,
+                "filled_base_amount",
+                "filledBaseAmount",
+                "filled_size",
+                "filledSize",
             )
+            if filled_qty is None or filled_qty <= 0:
+                filled_qty = self._get_decimal_value(
+                    order_data,
+                    "initial_base_amount",
+                    "initialBaseAmount",
+                )
+            if filled_qty is None or filled_qty <= 0:
+                self.logger.warning("Lighter 成交数量缺失，无法更新 PnL")
+                return
+
+            filled_quote = self._get_decimal_value(
+                order_data,
+                "filled_quote_amount",
+                "filledQuoteAmount",
+            )
+            avg_filled_price = self._get_decimal_value(
+                order_data,
+                "avg_filled_price",
+                "avgFilledPrice",
+            )
+            order_price = self._get_decimal_value(order_data, "price")
+            if avg_filled_price is None or avg_filled_price <= 0:
+                if filled_quote is not None and filled_quote > 0:
+                    avg_filled_price = filled_quote / filled_qty
+                elif order_price is not None and order_price > 0:
+                    avg_filled_price = order_price
+                else:
+                    avg_filled_price = self._last_lighter_mid or Decimal("0")
+            order_data["avg_filled_price"] = avg_filled_price
+
             if order_data["is_ask"]:
                 order_data["side"] = "SHORT"
                 order_type = "OPEN"
                 if self.position_tracker:
                     self.position_tracker.update_lighter_position(
-                        -Decimal(order_data["filled_base_amount"]))
+                        -filled_qty)
             else:
                 order_data["side"] = "LONG"
                 order_type = "CLOSE"
                 if self.position_tracker:
                     self.position_tracker.update_lighter_position(
-                        Decimal(order_data["filled_base_amount"]))
+                        filled_qty)
 
-            filled_qty = Decimal(order_data["filled_base_amount"])
             filled_price = order_data["avg_filled_price"]
             pnl_delta = -filled_qty if order_data["is_ask"] else filled_qty
             self.lighter_pnl.update(pnl_delta, filled_price)
