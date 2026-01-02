@@ -1,6 +1,7 @@
 """Order book management for Lighter exchange."""
 import asyncio
 import logging
+import time
 from decimal import Decimal
 from typing import Tuple, Optional
 
@@ -21,6 +22,10 @@ class OrderBookManager:
         self.lighter_order_book_sequence_gap = False
         self.lighter_snapshot_loaded = False
         self.lighter_order_book_lock = asyncio.Lock()
+        self.lighter_last_update_ts: Optional[float] = None
+        self.lighter_last_snapshot_ts: Optional[float] = None
+        self.lighter_ready_event = asyncio.Event()
+        self.lighter_update_event = asyncio.Event()
 
     # Lighter order book methods
     async def reset_lighter_order_book(self):
@@ -33,6 +38,48 @@ class OrderBookManager:
             self.lighter_snapshot_loaded = False
             self.lighter_best_bid = None
             self.lighter_best_ask = None
+            self.lighter_order_book_ready = False
+            self.lighter_last_update_ts = None
+            self.lighter_last_snapshot_ts = None
+            self.lighter_ready_event.clear()
+            self.lighter_update_event.clear()
+
+    def mark_lighter_snapshot(self):
+        """Mark initial snapshot receipt."""
+        now = time.monotonic()
+        self.lighter_last_snapshot_ts = now
+        self.lighter_last_update_ts = now
+        self.lighter_ready_event.set()
+        self.lighter_update_event.set()
+
+    def mark_lighter_update(self):
+        """Mark order book update receipt."""
+        self.lighter_last_update_ts = time.monotonic()
+        self.lighter_update_event.set()
+
+    def is_lighter_order_book_stale(self, max_age: float) -> bool:
+        """Check if the order book is stale."""
+        if self.lighter_last_update_ts is None:
+            return True
+        return (time.monotonic() - self.lighter_last_update_ts) > max_age
+
+    async def wait_for_lighter_ready(self, timeout: float) -> bool:
+        """Wait for initial snapshot."""
+        try:
+            await asyncio.wait_for(self.lighter_ready_event.wait(), timeout=timeout)
+            return True
+        except asyncio.TimeoutError:
+            return False
+
+    async def wait_for_lighter_update(self, timeout: float) -> bool:
+        """Wait for next order book update."""
+        try:
+            await asyncio.wait_for(self.lighter_update_event.wait(), timeout=timeout)
+            return True
+        except asyncio.TimeoutError:
+            return False
+        finally:
+            self.lighter_update_event.clear()
 
     def update_lighter_order_book(self, side: str, levels: list):
         """Update Lighter order book with new levels."""
@@ -45,7 +92,7 @@ class OrderBookManager:
                 price = Decimal(level.get("price", 0))
                 size = Decimal(level.get("size", 0))
             else:
-                self.logger.warning(f"⚠️ Unexpected level format: {level}")
+                self.logger.warning(f"意外的档位格式: {level}")
                 continue
 
             if size > 0:
@@ -58,7 +105,7 @@ class OrderBookManager:
         """Validate order book offset sequence."""
         if new_offset <= self.lighter_order_book_offset:
             self.logger.warning(
-                f"⚠️ Out-of-order update: new_offset={new_offset}, "
+                f"乱序更新: new_offset={new_offset}, "
                 f"current_offset={self.lighter_order_book_offset}")
             return False
         return True
@@ -69,7 +116,7 @@ class OrderBookManager:
         for side in ["bids", "asks"]:
             for price, size in self.lighter_order_book[side].items():
                 if price <= 0 or size <= 0:
-                    self.logger.error(f"❌ Invalid order book data: {side} price={price}, size={size}")
+                    self.logger.error(f"无效的订单簿数据: {side} price={price}, size={size}")
                     return False
         return True
 
@@ -100,7 +147,7 @@ class OrderBookManager:
         best_bid, best_ask = self.get_lighter_best_levels()
 
         if best_bid is None or best_ask is None:
-            raise Exception("Cannot calculate mid price - missing order book data")
+            raise Exception("无法计算中间价，订单簿数据缺失")
 
         mid_price = (best_bid[0] + best_ask[0]) / Decimal('2')
         return mid_price

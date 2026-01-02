@@ -41,7 +41,7 @@ class LighterClient(BaseExchangeClient):
         self.base_url = "https://mainnet.zklighter.elliot.ai"
 
         if not self.api_key_private_key:
-            raise ValueError("API_KEY_PRIVATE_KEY must be set in environment variables")
+            raise ValueError("必须在环境变量中设置 API_KEY_PRIVATE_KEY")
 
         # Initialize logger
         self.logger = TradingLogger(exchange="lighter", ticker=self.config.ticker, log_to_console=False)
@@ -65,7 +65,7 @@ class LighterClient(BaseExchangeClient):
         required_env_vars = ['API_KEY_PRIVATE_KEY', 'LIGHTER_ACCOUNT_INDEX', 'LIGHTER_API_KEY_INDEX']
         missing_vars = [var for var in required_env_vars if not os.getenv(var)]
         if missing_vars:
-            raise ValueError(f"Missing required environment variables: {missing_vars}")
+            raise ValueError(f"缺少必需的环境变量: {missing_vars}")
 
     async def _get_market_config(self, ticker: str) -> Tuple[int, int, int]:
         """Get market configuration for a ticker using official SDK."""
@@ -86,16 +86,16 @@ class LighterClient(BaseExchangeClient):
                     self.config.market_info = market
 
                     self.logger.log(
-                        f"Market config for {ticker}: ID={market_id}, "
-                        f"Base multiplier={base_multiplier}, Price multiplier={price_multiplier}",
+                        f"市场配置 {ticker}: ID={market_id}, "
+                        f"基础乘数={base_multiplier}, 价格乘数={price_multiplier}",
                         "INFO"
                     )
                     return market_id, base_multiplier, price_multiplier
 
-            raise Exception(f"Ticker {ticker} not found in available markets")
+            raise Exception(f"未在可用市场中找到交易对 {ticker}")
 
         except Exception as e:
-            self.logger.log(f"Error getting market config: {e}", "ERROR")
+            self.logger.log(f"获取市场配置失败: {e}", "ERROR")
             raise
 
     async def _initialize_lighter_client(self):
@@ -112,11 +112,11 @@ class LighterClient(BaseExchangeClient):
                 # Check client
                 err = self.lighter_client.check_client()
                 if err is not None:
-                    raise Exception(f"CheckClient error: {err}")
+                    raise Exception(f"CheckClient 错误: {err}")
 
-                self.logger.log("Lighter client initialized successfully", "INFO")
+                self.logger.log("Lighter 客户端初始化成功", "INFO")
             except Exception as e:
-                self.logger.log(f"Failed to initialize Lighter client: {e}", "ERROR")
+                self.logger.log(f"初始化 Lighter 客户端失败: {e}", "ERROR")
                 raise
         return self.lighter_client
 
@@ -149,7 +149,7 @@ class LighterClient(BaseExchangeClient):
             await asyncio.sleep(2)
 
         except Exception as e:
-            self.logger.log(f"Error connecting to Lighter: {e}", "ERROR")
+            self.logger.log(f"连接 Lighter 失败: {e}", "ERROR")
             raise
 
     async def disconnect(self) -> None:
@@ -163,7 +163,7 @@ class LighterClient(BaseExchangeClient):
                 await self.api_client.close()
                 self.api_client = None
         except Exception as e:
-            self.logger.log(f"Error during Lighter disconnect: {e}", "ERROR")
+            self.logger.log(f"Lighter 断开连接时出错: {e}", "ERROR")
 
     def get_exchange_name(self) -> str:
         """Get the exchange name."""
@@ -241,11 +241,11 @@ class LighterClient(BaseExchangeClient):
             best_ask = Decimal(str(self.ws_manager.best_ask))
 
             if best_bid <= 0 or best_ask <= 0 or best_bid >= best_ask:
-                self.logger.log("Invalid bid/ask prices", "ERROR")
-                raise ValueError("Invalid bid/ask prices")
+                self.logger.log("买卖价无效", "ERROR")
+                raise ValueError("买卖价无效")
         else:
-            self.logger.log("Unable to get bid/ask prices from WebSocket.", "ERROR")
-            raise ValueError("WebSocket not running. No bid/ask prices available")
+            self.logger.log("无法从 WebSocket 获取买卖价", "ERROR")
+            raise ValueError("WebSocket 未运行，无法获取买卖价")
 
         return best_bid, best_ask
 
@@ -255,14 +255,14 @@ class LighterClient(BaseExchangeClient):
         if self.lighter_client is None:
             # This is a sync method, so we need to handle this differently
             # For now, raise an error if client is not initialized
-            raise ValueError("Lighter client not initialized. Call connect() first.")
+            raise ValueError("Lighter 客户端未初始化，请先调用 connect()")
 
         # Create order using official SDK
         create_order, tx_hash, error = await self.lighter_client.create_order(**order_params)
         if error is not None:
             return OrderResult(
                 success=False, order_id=str(order_params['client_order_index']),
-                error_message=f"Order creation error: {error}")
+                error_message=f"订单创建失败: {error}")
 
         else:
             return OrderResult(success=True, order_id=str(order_params['client_order_index']))
@@ -280,7 +280,7 @@ class LighterClient(BaseExchangeClient):
         elif side.lower() == 'sell':
             is_ask = True
         else:
-            raise Exception(f"Invalid side: {side}")
+            raise Exception(f"无效的方向: {side}")
 
         # Generate unique client order index
         client_order_index = int(time.time() * 1000) % 1000000  # Simple unique ID
@@ -312,7 +312,7 @@ class LighterClient(BaseExchangeClient):
         order_price = self.round_to_tick(order_price)
         order_result = await self.place_limit_order(contract_id, quantity, order_price, direction)
         if not order_result.success:
-            raise Exception(f"[OPEN] Error placing order: {order_result.error_message}")
+            raise Exception(f"[开仓] 下单失败: {order_result.error_message}")
 
         start_time = time.time()
         order_status = 'OPEN'
@@ -359,15 +359,15 @@ class LighterClient(BaseExchangeClient):
                 status='OPEN'
             )
         else:
-            raise Exception(f"[CLOSE] Error placing order: {order_result.error_message}")
+            raise Exception(f"[平仓] 下单失败: {order_result.error_message}")
 
     async def get_order_price(self, side: str = '') -> Decimal:
         """Get the price of an order with Lighter using official SDK."""
         # Get current market prices
         best_bid, best_ask = await self.fetch_bbo_prices(self.config.contract_id)
         if best_bid <= 0 or best_ask <= 0 or best_bid >= best_ask:
-            self.logger.log("Invalid bid/ask prices", "ERROR")
-            raise ValueError("Invalid bid/ask prices")
+            self.logger.log("买卖价无效", "ERROR")
+            raise ValueError("买卖价无效")
 
         order_price = (best_bid + best_ask) / 2
 
@@ -394,12 +394,12 @@ class LighterClient(BaseExchangeClient):
         )
 
         if error is not None:
-            return OrderResult(success=False, error_message=f"Cancel order error: {error}")
+            return OrderResult(success=False, error_message=f"撤单失败: {error}")
 
         if tx_hash:
             return OrderResult(success=True)
         else:
-            return OrderResult(success=False, error_message='Failed to send cancellation transaction')
+            return OrderResult(success=False, error_message='发送撤单交易失败')
 
     async def get_order_info(self, order_id: str) -> Optional[OrderInfo]:
         """Get order information from Lighter using official SDK."""
@@ -428,7 +428,7 @@ class LighterClient(BaseExchangeClient):
             return None
 
         except Exception as e:
-            self.logger.log(f"Error getting order info: {e}", "ERROR")
+            self.logger.log(f"获取订单信息失败: {e}", "ERROR")
             return None
 
     @query_retry(reraise=True)
@@ -441,8 +441,8 @@ class LighterClient(BaseExchangeClient):
         # Generate auth token for API call
         auth_token, error = self.lighter_client.create_auth_token_with_expiry()
         if error is not None:
-            self.logger.log(f"Error creating auth token: {error}", "ERROR")
-            raise ValueError(f"Error creating auth token: {error}")
+            self.logger.log(f"创建认证令牌失败: {error}", "ERROR")
+            raise ValueError(f"创建认证令牌失败: {error}")
 
         # Use OrderApi to get active orders
         order_api = lighter.OrderApi(self.api_client)
@@ -455,8 +455,8 @@ class LighterClient(BaseExchangeClient):
         )
 
         if not orders_response:
-            self.logger.log("Failed to get orders", "ERROR")
-            raise ValueError("Failed to get orders")
+            self.logger.log("获取订单失败", "ERROR")
+            raise ValueError("获取订单失败")
 
         return orders_response.orders
 
@@ -496,8 +496,8 @@ class LighterClient(BaseExchangeClient):
         account_data = await account_api.account(by="index", value=str(self.account_index))
 
         if not account_data or not account_data.accounts:
-            self.logger.log("Failed to get positions", "ERROR")
-            raise ValueError("Failed to get positions")
+            self.logger.log("获取仓位失败", "ERROR")
+            raise ValueError("获取仓位失败")
 
         return account_data.accounts[0].positions
 
@@ -517,8 +517,8 @@ class LighterClient(BaseExchangeClient):
         """Get contract ID for a ticker."""
         ticker = self.config.ticker
         if len(ticker) == 0:
-            self.logger.log("Ticker is empty", "ERROR")
-            raise ValueError("Ticker is empty")
+            self.logger.log("交易对为空", "ERROR")
+            raise ValueError("交易对为空")
 
         order_api = lighter.OrderApi(self.api_client)
         # Get all order books to find the market for our ticker
@@ -532,8 +532,8 @@ class LighterClient(BaseExchangeClient):
                 break
 
         if market_info is None:
-            self.logger.log("Failed to get markets", "ERROR")
-            raise ValueError("Failed to get markets")
+            self.logger.log("获取市场列表失败", "ERROR")
+            raise ValueError("获取市场列表失败")
 
         market_summary = await order_api.order_book_details(market_id=market_info.market_id)
         order_book_details = market_summary.order_book_details[0]
@@ -545,7 +545,7 @@ class LighterClient(BaseExchangeClient):
         try:
             self.config.tick_size = Decimal("1") / (Decimal("10") ** order_book_details.price_decimals)
         except Exception:
-            self.logger.log("Failed to get tick size", "ERROR")
-            raise ValueError("Failed to get tick size")
+            self.logger.log("获取最小价格单位失败", "ERROR")
+            raise ValueError("获取最小价格单位失败")
 
         return self.config.contract_id, self.config.tick_size

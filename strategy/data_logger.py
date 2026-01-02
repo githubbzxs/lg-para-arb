@@ -77,7 +77,7 @@ class DataLogger:
                 quantity
             ])
 
-        self.logger.info(f"📊 Trade logged to CSV: {exchange} {side} {quantity} @ {price}")
+        self.logger.info(f"成交已写入 CSV: {exchange} {side} {quantity} @ {price}")
 
     def log_bbo_to_csv(self, maker_bid: Decimal, maker_ask: Decimal, lighter_bid: Decimal,
                        lighter_ask: Decimal, long_maker: bool, short_maker: bool,
@@ -118,7 +118,7 @@ class DataLogger:
                 self.bbo_csv_file.flush()
                 self.bbo_write_counter = 0
         except Exception as e:
-            self.logger.error(f"Error writing to BBO CSV: {e}")
+            self.logger.error(f"写入 BBO CSV 失败: {e}")
             # Try to reinitialize on error
             try:
                 if self.bbo_csv_file:
@@ -135,12 +135,12 @@ class DataLogger:
                 self.bbo_csv_file.close()
                 self.bbo_csv_file = None
                 self.bbo_csv_writer = None
-                self.logger.info("📊 BBO CSV file closed")
+                self.logger.info("BBO CSV 文件已关闭")
             except (ValueError, OSError) as e:
                 # File already closed or I/O error - ignore silently
                 self.bbo_csv_file = None
                 self.bbo_csv_writer = None
             except Exception as e:
-                self.logger.error(f"Error closing BBO CSV file: {e}")
+                self.logger.error(f"关闭 BBO CSV 文件失败: {e}")
                 self.bbo_csv_file = None
                 self.bbo_csv_writer = None

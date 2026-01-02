@@ -28,7 +28,7 @@ This project is a cryptocurrency futures cross-exchange arbitrage framework, int
 
 ## Project Overview
 
-This project implements a cross-exchange arbitrage trading bot that performs spread arbitrage between **Variational** and **Lighter** exchanges. The bot executes arbitrage trades by taking liquidity on both venues (RFQ accept on Variational, market/taker on Lighter) to complete the hedge.
+This project implements a cross-exchange arbitrage trading bot that performs spread arbitrage between **Paradex** and **Lighter** exchanges. The bot executes arbitrage trades by taking liquidity on both venues (market/taker on Paradex, market/taker on Lighter) to complete the hedge.
 
 ## Features
 
@@ -42,7 +42,7 @@ This project implements a cross-exchange arbitrage trading bot that performs spr
 ## System Requirements
 
 - Python 3.11+
-- Variational and Lighter exchange accounts
+- Paradex and Lighter exchange accounts
 - API keys and access permissions
 
 ## Installation
@@ -80,6 +80,15 @@ venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+Then install the Paradex SDK without dependencies (avoids version conflicts):
+
+```bash
+pip install --no-deps -r requirements_paradex.txt
+```
+
+Windows note: if `crypto_cpp_py` fails with `LoadLibraryEx`, install MinGW runtime DLLs and place these next to `libcrypto_c_exports.dll` in `site-packages`:
+`libgcc_s_seh-1.dll`, `libstdc++-6.dll`, `libwinpthread-1.dll`.
+
 ### 4. Configure Environment Variables
 
 Copy `env_example.txt` to `.env` and fill in your API credentials:
@@ -91,22 +100,23 @@ cp env_example.txt .env
 Edit the `.env` file and fill in your API information:
 
 ```env
-# Variational account credentials (required)
-VARIATIONAL_API_KEY=your_api_key_here
-VARIATIONAL_API_SECRET=your_api_secret_here
+# Paradex configuration (required)
+PARADEX_ENV=prod
+PARADEX_MARKET=BTC-USD-PERP
+PARADEX_L2_PRIVATE_KEY=your_l2_private_key_here
+PARADEX_L2_ADDRESS=your_l2_address_here
 
-# Variational API endpoint (optional)
-VARIATIONAL_BASE_URL=https://api.variational.io/v1
-
-# Variational RFQ settings (optional)
-VARIATIONAL_TARGET_COMPANY_IDS=
-VARIATIONAL_RFQ_EXPIRES_SECONDS=5
+# Paradex L1 configuration (optional, for onboarding)
+PARADEX_L1_ADDRESS=
+PARADEX_L1_PRIVATE_KEY=
 
 # Lighter configuration (required)
 API_KEY_PRIVATE_KEY=your_api_key_private_key_here
 LIGHTER_ACCOUNT_INDEX=your_account_index
 LIGHTER_API_KEY_INDEX=your_api_key_index
 ```
+
+Note: `PARADEX_MARKET` defaults to `{TICKER}-USD-PERP`. Set it explicitly if your market symbol differs from `--ticker`.
 
 ## Usage
 
@@ -118,12 +128,12 @@ python arbitrage.py --ticker BTC --size 0.002 --max-position 0.1 --long-threshol
 
 ### Command Line Arguments
 
-- `--exchange`: Exchange name (default: variational)
+- `--exchange`: Exchange name (default: paradex)
 - `--ticker`: Trading pair symbol (default: BTC)
 - `--size`: Order size per trade (required)
 - `--max-position`: Maximum position limit (required)
-- `--long-threshold`: Long arbitrage trigger threshold (how much higher Lighter bid price must be than Variational quote to trigger a long on Variational, default: 10)
-- `--short-threshold`: Short arbitrage trigger threshold (how much higher Variational quote must be than Lighter ask price to trigger a short on Variational, default: 10)
+- `--long-threshold`: Long arbitrage trigger threshold (how much higher Lighter bid price must be than Paradex quote to trigger a long on Paradex, default: 10)
+- `--short-threshold`: Short arbitrage trigger threshold (how much higher Paradex quote must be than Lighter ask price to trigger a short on Paradex, default: 10)
 - `--fill-timeout`: Limit order fill timeout (seconds, default: 5)
 
 ### Usage Examples
@@ -146,7 +156,7 @@ cross-exchange-arbitrage/
 │   ├── lighter.py           # Lighter exchange implementation
 │   └── lighter_custom_websocket.py  # Lighter WebSocket management
 ├── strategy/                 # Trading strategy modules
-│   ├── variational_arb.py   # Main arbitrage strategy
+│   ├── paradex_arb.py       # Main arbitrage strategy
 │   ├── order_book_manager.py    # Order book management
 │   ├── order_manager.py     # Order management
 │   ├── position_tracker.py  # Position tracking
@@ -160,10 +170,10 @@ cross-exchange-arbitrage/
 ## How It Works
 
 1. **Order Book Monitoring**: Receives real-time order book updates from Lighter via WebSocket
-2. **Price Fetching**: Gets reference quotes from Variational API
+2. **Price Fetching**: Gets reference quotes from Paradex API
 3. **Spread Detection**: Identifies arbitrage opportunities when spreads exceed thresholds
 4. **Order Execution**:
-   - Accepts RFQ quotes on Variational (taker)
+   - Executes market/taker orders on Paradex
    - Executes market/taker orders on Lighter to complete the hedge
 5. **Position Management**: Tracks positions in real-time to ensure they do not exceed maximum position limits
 6. **Risk Control**: Monitors order fill status and cancels RFQs if they do not fill within the timeout
@@ -185,7 +195,7 @@ Main dependencies include:
 - `asyncio`: Asynchronous programming support
 - `requests`: HTTP requests
 - `tenacity`: Retry mechanism
-- `variational`: Variational official Python SDK
+- `paradex_py`: Paradex Python SDK
 - `lighter-python`: Lighter exchange SDK
 
 ## License

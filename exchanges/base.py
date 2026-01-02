@@ -19,8 +19,10 @@ def query_retry(
     reraise: bool = False
 ):
     def retry_error_callback(retry_state: RetryCallState):
-        print(f"Operation: [{retry_state.fn.__name__}] failed after {retry_state.attempt_number} retries, "
-              f"exception: {str(retry_state.outcome.exception())}")
+        print(
+            f"操作 [{retry_state.fn.__name__}] 重试 {retry_state.attempt_number} 次后仍失败，"
+            f"异常: {str(retry_state.outcome.exception())}"
+        )
         return default_return
 
     return retry(

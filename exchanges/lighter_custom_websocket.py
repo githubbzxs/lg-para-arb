@@ -47,23 +47,23 @@ class LighterCustomWebSocketManager:
     def update_order_book(self, side: str, updates: List[Dict[str, Any]]):
         """Update the order book with new price/size information."""
         if side not in ["bids", "asks"]:
-            self._log(f"Invalid side parameter: {side}. Must be 'bids' or 'asks'", "ERROR")
+            self._log(f"无效的方向参数: {side}，只能是 'bids' 或 'asks'", "ERROR")
             return
 
         ob = self.order_book[side]
 
         if not isinstance(updates, list):
-            self._log(f"Invalid updates format for {side}: expected list, got {type(updates)}", "ERROR")
+            self._log(f"更新数据格式无效({side}): 期望 list，实际为 {type(updates)}", "ERROR")
             return
 
         for update in updates:
             try:
                 if not isinstance(update, dict):
-                    self._log(f"Invalid update format: expected dict, got {type(update)}", "ERROR")
+                    self._log(f"单条更新格式无效: 期望 dict，实际为 {type(update)}", "ERROR")
                     continue
 
                 if "price" not in update or "size" not in update:
-                    self._log(f"Missing required fields in update: {update}", "ERROR")
+                    self._log(f"更新缺少必需字段: {update}", "ERROR")
                     continue
 
                 price = float(update["price"])
@@ -71,11 +71,11 @@ class LighterCustomWebSocketManager:
 
                 # Validate price and size are reasonable
                 if price <= 0:
-                    self._log(f"Invalid price in update: {price}", "ERROR")
+                    self._log(f"更新价格无效: {price}", "ERROR")
                     continue
 
                 if size < 0:
-                    self._log(f"Invalid size in update: {size}", "ERROR")
+                    self._log(f"更新数量无效: {size}", "ERROR")
                     continue
 
                 if size == 0:
@@ -83,7 +83,7 @@ class LighterCustomWebSocketManager:
                 else:
                     ob[price] = size
             except (KeyError, ValueError, TypeError) as e:
-                self._log(f"Error processing order book update: {e}, update: {update}", "ERROR")
+                self._log(f"处理订单簿更新失败: {e}，更新内容: {update}", "ERROR")
                 continue
 
     def validate_order_book_offset(self, new_offset: int) -> bool:
@@ -102,12 +102,18 @@ class LighterCustomWebSocketManager:
             return True
         elif new_offset > expected_offset:
             # Gap detected - we missed some updates
-            self._log(f"Order book sequence gap detected! Expected offset {expected_offset}, got {new_offset}", "WARNING")
+            self._log(
+                f"检测到订单簿序列缺口: 期望 offset {expected_offset}，实际 {new_offset}",
+                "WARNING"
+            )
             self.order_book_sequence_gap = True
             return False
         else:
             # Out of order or duplicate update
-            self._log(f"Out of order update received! Expected offset {expected_offset}, got {new_offset}", "WARNING")
+            self._log(
+                f"收到乱序更新: 期望 offset {expected_offset}，实际 {new_offset}",
+                "WARNING"
+            )
             return True  # Don't reconnect for out-of-order updates, just ignore them
 
     def handle_order_book_cutoff(self, data: Dict[str, Any]) -> bool:
@@ -116,17 +122,17 @@ class LighterCustomWebSocketManager:
 
         # Validate required fields
         if not order_book or "code" not in order_book or "offset" not in order_book:
-            self._log("Incomplete order book update - missing required fields", "WARNING")
+            self._log("订单簿更新不完整: 缺少必需字段", "WARNING")
             return False
 
         # Check if the order book has the expected structure
         if "asks" not in order_book or "bids" not in order_book:
-            self._log("Incomplete order book update - missing bids/asks", "WARNING")
+            self._log("订单簿更新不完整: 缺少 bids/asks", "WARNING")
             return False
 
         # Validate that asks and bids are lists
         if not isinstance(order_book["asks"], list) or not isinstance(order_book["bids"], list):
-            self._log("Invalid order book structure - asks/bids should be lists", "WARNING")
+            self._log("订单簿结构无效: asks/bids 应为列表", "WARNING")
             return False
 
         return True
@@ -144,12 +150,12 @@ class LighterCustomWebSocketManager:
 
             # Check if best bid is higher than best ask (inconsistent)
             if best_bid >= best_ask:
-                self._log(f"Order book inconsistency detected! Best bid: {best_bid}, Best ask: {best_ask}", "WARNING")
+                self._log(f"检测到订单簿不一致: 最佳买价 {best_bid}，最佳卖价 {best_ask}", "WARNING")
                 return False
 
             return True
         except (ValueError, KeyError) as e:
-            self._log(f"Error validating order book integrity: {e}", "ERROR")
+            self._log(f"校验订单簿完整性失败: {e}", "ERROR")
             return False
 
     async def request_fresh_snapshot(self):
@@ -169,9 +175,9 @@ class LighterCustomWebSocketManager:
             subscribe_msg = json.dumps({"type": "subscribe", "channel": f"order_book/{self.market_index}"})
             await self.ws.send(subscribe_msg)
 
-            self._log("Requested fresh order book snapshot", "INFO")
+            self._log("已请求新的订单簿快照", "INFO")
         except Exception as e:
-            self._log(f"Error requesting fresh snapshot: {e}", "ERROR")
+            self._log(f"请求新快照失败: {e}", "ERROR")
             raise
 
     def get_best_levels(self) -> Tuple[Tuple[Optional[float], Optional[float]], Tuple[Optional[float], Optional[float]]]:
@@ -191,7 +197,7 @@ class LighterCustomWebSocketManager:
 
             return best_bid, best_ask
         except (ValueError, KeyError) as e:
-            self._log(f"Error getting best levels: {e}", "ERROR")
+            self._log(f"获取最佳档位失败: {e}", "ERROR")
             return (None, None), (None, None)
 
     def cleanup_old_order_book_levels(self):
@@ -215,7 +221,7 @@ class LighterCustomWebSocketManager:
                     self.order_book["asks"][price] = size
 
         except Exception as e:
-            self._log(f"Error cleaning up order book levels: {e}", "ERROR")
+            self._log(f"清理订单簿档位失败: {e}", "ERROR")
 
     async def reset_order_book(self):
         """Reset the order book state when reconnecting."""
@@ -236,7 +242,7 @@ class LighterCustomWebSocketManager:
                 self.order_update_callback(order_data_list)
 
         except Exception as e:
-            self._log(f"Error handling order update: {e}", "ERROR")
+            self._log(f"处理订单更新失败: {e}", "ERROR")
 
     async def connect(self):
         """Connect to Lighter WebSocket using custom implementation."""
@@ -267,7 +273,7 @@ class LighterCustomWebSocketManager:
                             ten_minutes_deadline = int(time.time() + 10 * 60)
                             auth_token, err = self.lighter_client.create_auth_token_with_expiry(ten_minutes_deadline)
                             if err is not None:
-                                self._log(f"Failed to create auth token for account orders subscription: {err}", "WARNING")
+                                self._log(f"创建账户订单订阅认证令牌失败: {err}", "WARNING")
                             else:
                                 auth_message = {
                                     "type": "subscribe",
@@ -275,14 +281,14 @@ class LighterCustomWebSocketManager:
                                     "auth": auth_token
                                 }
                                 await self.ws.send(json.dumps(auth_message))
-                                self._log("Subscribed to account orders with auth token (expires in 10 minutes)", "INFO")
+                                self._log("已使用认证令牌订阅账户订单（10分钟后过期）", "INFO")
                     except Exception as e:
-                        self._log(f"Error creating auth token for account orders subscription: {e}", "WARNING")
+                        self._log(f"创建账户订单订阅认证令牌时出错: {e}", "WARNING")
 
                     self.running = True
                     # Reset reconnect delay on successful connection
                     reconnect_delay = 1
-                    self._log("WebSocket connected using custom implementation", "INFO")
+                    self._log("自定义 WebSocket 连接成功", "INFO")
 
                     # Main message processing loop
                     while self.running:
@@ -292,7 +298,7 @@ class LighterCustomWebSocketManager:
                             try:
                                 data = json.loads(msg)
                             except json.JSONDecodeError as e:
-                                self._log(f"JSON parsing error in Lighter websocket: {e}", "ERROR")
+                                self._log(f"Lighter WebSocket JSON 解析错误: {e}", "ERROR")
                                 continue
 
                             # Reset timeout counter on successful message
@@ -309,26 +315,29 @@ class LighterCustomWebSocketManager:
                                     if order_book and "offset" in order_book:
                                         # Set the initial offset from the snapshot
                                         self.order_book_offset = order_book["offset"]
-                                        self._log(f"Initial order book offset set to: {self.order_book_offset}", "INFO")
+                                        self._log(f"初始订单簿 offset 设置为: {self.order_book_offset}", "INFO")
 
                                     self.update_order_book("bids", order_book.get("bids", []))
                                     self.update_order_book("asks", order_book.get("asks", []))
                                     self.snapshot_loaded = True
 
-                                    self._log(f"Lighter order book snapshot loaded with "
-                                              f"{len(self.order_book['bids'])} bids and "
-                                              f"{len(self.order_book['asks'])} asks", "INFO")
+                                    self._log(
+                                        f"Lighter 订单簿快照加载完成，"
+                                        f"买单 {len(self.order_book['bids'])}，"
+                                        f"卖单 {len(self.order_book['asks'])}",
+                                        "INFO"
+                                    )
 
                                 elif data.get("type") == "update/order_book" and self.snapshot_loaded:
                                     # Check for cutoff/incomplete updates first
                                     if not self.handle_order_book_cutoff(data):
-                                        self._log("Skipping incomplete order book update", "WARNING")
+                                        self._log("订单簿更新不完整，已跳过", "WARNING")
                                         continue
 
                                     # Extract offset from the message
                                     order_book = data.get("order_book", {})
                                     if not order_book or "offset" not in order_book:
-                                        self._log("Order book update missing offset, skipping", "WARNING")
+                                        self._log("订单簿更新缺少 offset，已跳过", "WARNING")
                                         continue
 
                                     new_offset = order_book["offset"]
@@ -337,7 +346,7 @@ class LighterCustomWebSocketManager:
                                     if not self.validate_order_book_offset(new_offset):
                                         # Sequence gap detected, try to request fresh snapshot first
                                         if self.order_book_sequence_gap:
-                                            self._log("Sequence gap detected, requesting fresh snapshot...", "WARNING")
+                                            self._log("检测到序列缺口，正在请求新快照...", "WARNING")
                                             # Release lock before network I/O
                                             break
                                         else:
@@ -350,7 +359,7 @@ class LighterCustomWebSocketManager:
 
                                     # Validate order book integrity after update
                                     if not self.validate_order_book_integrity():
-                                        self._log("Order book integrity check failed, requesting fresh snapshot...", "WARNING")
+                                        self._log("订单簿完整性校验失败，正在请求新快照...", "WARNING")
                                         # Release lock before network I/O
                                         break
 
@@ -374,7 +383,7 @@ class LighterCustomWebSocketManager:
                                     # Ignore updates until we have the initial snapshot
                                     continue
                                 else:
-                                    self._log(f"Unknown message type: {data.get('type', 'unknown')}", "DEBUG")
+                                    self._log(f"未知消息类型: {data.get('type', '未知')}", "DEBUG")
 
                             # Periodic cleanup outside the lock
                             cleanup_counter += 1
@@ -388,35 +397,37 @@ class LighterCustomWebSocketManager:
                                     await self.request_fresh_snapshot()
                                     self.order_book_sequence_gap = False
                                 except Exception as e:
-                                    self._log(f"Failed to request fresh snapshot: {e}", "ERROR")
-                                    self._log("Reconnecting due to sequence gap...", "WARNING")
+                                    self._log(f"请求新快照失败: {e}", "ERROR")
+                                    self._log("检测到序列缺口，正在重连...", "WARNING")
                                     break
 
                         except asyncio.TimeoutError:
                             timeout_count += 1
                             if timeout_count % 30 == 0:
-                                self._log(f"No message from Lighter websocket for {timeout_count} seconds "
-                                          f"(abnormal behavior)", "WARNING")
+                                self._log(
+                                    f"Lighter WebSocket {timeout_count} 秒未收到消息（异常）",
+                                    "WARNING"
+                                )
                             continue
                         except websockets.exceptions.ConnectionClosed as e:
-                            self._log(f"Lighter websocket connection closed: {e}", "WARNING")
-                            self._log("Connection lost, will attempt to reconnect...", "INFO")
+                            self._log(f"Lighter WebSocket 连接已关闭: {e}", "WARNING")
+                            self._log("连接已断开，准备重连...", "INFO")
                             break  # Break inner loop to reconnect
                         except websockets.exceptions.WebSocketException as e:
-                            self._log(f"Lighter websocket error: {e}", "ERROR")
+                            self._log(f"Lighter WebSocket 错误: {e}", "ERROR")
                             break  # Break inner loop to reconnect
                         except Exception as e:
-                            self._log(f"Error in Lighter websocket: {e}", "ERROR")
+                            self._log(f"Lighter WebSocket 出错: {e}", "ERROR")
                             import traceback
-                            self._log(f"Full traceback: {traceback.format_exc()}", "ERROR")
+                            self._log(f"完整堆栈: {traceback.format_exc()}", "ERROR")
                             break  # Break inner loop to reconnect
 
             except Exception as e:
-                self._log(f"Failed to connect to Lighter websocket: {e}", "ERROR")
+                self._log(f"连接 Lighter WebSocket 失败: {e}", "ERROR")
 
             # Wait before reconnecting with exponential backoff
             if self.running:
-                self._log(f"Waiting {reconnect_delay} seconds before reconnecting...", "INFO")
+                self._log(f"等待 {reconnect_delay} 秒后重连...", "INFO")
                 await asyncio.sleep(reconnect_delay)
                 # Exponential backoff: double the delay, but cap at max_reconnect_delay
                 reconnect_delay = min(reconnect_delay * 2, max_reconnect_delay)
@@ -428,5 +439,5 @@ class LighterCustomWebSocketManager:
             try:
                 await self.ws.close()
             except Exception as e:
-                self._log(f"Error closing websocket: {e}", "ERROR")
-        self._log("WebSocket disconnected", "INFO")
+                self._log(f"关闭 WebSocket 失败: {e}", "ERROR")
+        self._log("WebSocket 已断开连接", "INFO")
