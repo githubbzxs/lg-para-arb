@@ -271,6 +271,17 @@ class ParadexArb:
         except (TypeError, ValueError):
             return str(value)
 
+    def _format_trade_action(self, action: Optional[str]) -> str:
+        if not action:
+            return "交易"
+        mapping = {
+            "OPEN_LONG": "开多",
+            "OPEN_SHORT": "开空",
+            "CLOSE_LONG": "平多",
+            "CLOSE_SHORT": "平空",
+        }
+        return mapping.get(action, action)
+
     def _log_status(self, now: float) -> None:
         if self.status_log_interval <= 0:
             return
@@ -614,11 +625,13 @@ class ParadexArb:
             )
 
             pending = self._pending_trade
+            message = None
             if pending:
                 age = time.time() - pending.get("ts", 0)
                 if age < 120:
+                    action_label = self._format_trade_action(pending.get("action"))
                     message = (
-                        f"{self.ticker} {pending.get('action', 'TRADE')}\n"
+                        f"{self.ticker} {action_label} 已成交\n"
                         f"Paradex {pending.get('paradex_side', '')} "
                         f"{self._format_optional(pending.get('quantity'))} @ "
                         f"{self._format_optional(pending.get('paradex_price'))}\n"
@@ -627,8 +640,16 @@ class ParadexArb:
                         f"{self._format_optional(filled_price)}\n"
                         f"{self._build_status_message()}"
                     )
-                    self._queue_telegram_message(message)
                 self._pending_trade = None
+            if message is None:
+                message = (
+                    f"{self.ticker} Lighter 成交\n"
+                    f"Lighter {order_data['side']} "
+                    f"{self._format_optional(filled_qty)} @ "
+                    f"{self._format_optional(filled_price)}\n"
+                    f"{self._build_status_message()}"
+                )
+            self._queue_telegram_message(message)
 
             self.order_manager.mark_lighter_order_filled()
 
@@ -1042,12 +1063,23 @@ class ParadexArb:
                 quantity=str(quantity)
             )
 
-            await self.order_manager.place_lighter_market_order(
+            tx_hash = await self.order_manager.place_lighter_market_order(
                 'sell',
                 quantity,
                 log_price,
                 self.stop_flag
             )
+            if tx_hash:
+                action_label = self._format_trade_action(action)
+                message = (
+                    f"{self.ticker} {action_label} 已提交\n"
+                    f"Paradex BUY {self._format_optional(quantity)} @ "
+                    f"{self._format_optional(log_price)}\n"
+                    f"Lighter sell {self._format_optional(quantity)} @ "
+                    f"{self._format_optional(log_price)}\n"
+                    f"{self._build_status_message()}"
+                )
+                self._queue_telegram_message(message)
 
         except Exception as e:
             if self.stop_flag:
@@ -1114,12 +1146,23 @@ class ParadexArb:
                 quantity=str(quantity)
             )
 
-            await self.order_manager.place_lighter_market_order(
+            tx_hash = await self.order_manager.place_lighter_market_order(
                 'buy',
                 quantity,
                 log_price,
                 self.stop_flag
             )
+            if tx_hash:
+                action_label = self._format_trade_action(action)
+                message = (
+                    f"{self.ticker} {action_label} 已提交\n"
+                    f"Paradex SELL {self._format_optional(quantity)} @ "
+                    f"{self._format_optional(log_price)}\n"
+                    f"Lighter buy {self._format_optional(quantity)} @ "
+                    f"{self._format_optional(log_price)}\n"
+                    f"{self._build_status_message()}"
+                )
+                self._queue_telegram_message(message)
 
         except Exception as e:
             if self.stop_flag:
